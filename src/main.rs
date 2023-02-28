@@ -76,17 +76,31 @@ fn write_machine() -> Option<()> {
     // This is for `char* argv[]`.
     let i64_type = context.i64_type();
     let char_star_array_type = i64_type.into();
-    let main_fn_type = i8_type.fn_type(&[i64_type.into(), char_star_array_type], false);
-    let function = module.add_function("main", main_fn_type, None);
     // TODO: Learn from https://gota7.github.io/GotaGuide/ProgrammingLanguage/Llvm.html which does
     // a raw _start.
-    let basic_block = context.append_basic_block(function, "entry");
-    let builder = context.create_builder();
-    builder.position_at_end(basic_block);
+    let main_fn_type = i8_type.fn_type(&[i64_type.into(), char_star_array_type], false);
+    let main = module.add_function("main", main_fn_type, None);
+    {
+        let basic_block = context.append_basic_block(main, "entry");
+        let builder = context.create_builder();
+        builder.position_at_end(basic_block);
 
-    let argc = function.get_nth_param(0)?.into_int_value();
+        let argc = main.get_nth_param(0)?.into_int_value();
+        builder.build_return(Some(&argc));
+    }
 
-    builder.build_return(Some(&argc));
+    if false {
+        let start_fn_type = void_type.fn_type(&[], false);
+        let start = module.add_function("_start", start_fn_type, None);
+        let basic_block = context.append_basic_block(start, "entry");
+        let builder = context.create_builder();
+        builder.position_at_end(basic_block);
+        // https://stackoverflow.com/questions/16721164/x86-linux-assembler-get-program-parameters-from-start
+        // let dummy_argc_val = i64_type.const_int(2, false);
+        // let dummy_argv_val = i64_type.const_int(8000, false);
+        // builder.build_call(main, &[dummy_argc_val.into(), dummy_argv_val.into()], "call_main");
+        builder.build_return(None);
+    }
 
     // Can compile this to elf with
     // clang main.bc -o main.elf -target x86_64-pc-linux-gnu
@@ -98,31 +112,32 @@ fn write_machine() -> Option<()> {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let context = Context::create();
-    let module = context.create_module("sum");
-    let execution_engine = module.create_jit_execution_engine(OptimizationLevel::None)?;
-    let codegen = CodeGen {
-        context: &context,
-        module,
-        builder: context.create_builder(),
-        execution_engine,
-    };
+    /*
+        let context = Context::create();
+        let module = context.create_module("sum");
+        let execution_engine = module.create_jit_execution_engine(OptimizationLevel::None)?;
+        let codegen = CodeGen {
+            context: &context,
+            module,
+            builder: context.create_builder(),
+            execution_engine,
+        };
 
-    let sum = codegen.jit_compile_sum().ok_or("Unable to JIT compile `sum`")?;
+        let sum = codegen.jit_compile_sum().ok_or("Unable to JIT compile `sum`")?;
 
-    let x = 1u64;
-    let y = 2u64;
-    let z = 3u64;
+        let x = 1u64;
+        let y = 2u64;
+        let z = 3u64;
 
-    let res = unsafe {
-        sum.call(x, y, z) // The unsafe thing is to call 'sum'.
-    };
+        let res = unsafe {
+            sum.call(x, y, z) // The unsafe thing is to call 'sum'.
+        };
 
-    println!("{} + {} + {} = {}", x, y, z, res);
-    assert_eq!(res, x + y + z);
+        println!("{} + {} + {} = {}", x, y, z, res);
+        assert_eq!(res, x + y + z);
 
-    dbg!(codegen.module.write_bitcode_to_path(Path::new("./a.bc")));
-
+        dbg!(codegen.module.write_bitcode_to_path(Path::new("./a.bc")));
+    */
     write_machine();
 
     Ok(())

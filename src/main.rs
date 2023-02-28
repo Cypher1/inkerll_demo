@@ -6,6 +6,8 @@ use inkwell::module::Module;
 use inkwell::targets::{CodeModel, RelocMode, FileType, Target, TargetTriple, InitializationConfig};
 use std::error::Error;
 use std::path::Path;
+use std::process::Command;
+use std::io::{stdout, stderr, Write};
 use libc::SYS_exit;
 
 // Look at 
@@ -53,7 +55,7 @@ fn write_machine() -> Option<()> {
     let reloc = RelocMode::Default;
     let model = CodeModel::Default;
     // let path = Path::new("/tmp/some/path/main.asm");
-    let path = Path::new("./main.asm");
+    let path = Path::new("./main.elf");
     let target = Target::from_name("x86-64").unwrap();
     let target_machine = target.create_target_machine(
         &TargetTriple::create("x86_64-pc-linux-gnu"),
@@ -89,7 +91,7 @@ fn write_machine() -> Option<()> {
         builder.build_return(Some(&argc));
     }
 
-    if true {
+    if false {
         let start_fn_type = void_type.fn_type(&[], false);
         let start = module.add_function("_start", start_fn_type, None);
         let basic_block = context.append_basic_block(start, "entry");
@@ -112,7 +114,7 @@ fn write_machine() -> Option<()> {
         let asm_fn = context.i64_type().fn_type(&[context.i64_type().into(), context.i64_type().into()], false);
         let asm = context.create_inline_asm(
             /*ty*/ asm_fn,
-            /*assembly*/ "syscall".to_string(),
+            /*assembly*/ "mov eax,1\nint 0x80".to_string(),
             /*constraints*/ "=r,{rax},{rdi}".to_string(),
             /*sideeffects*/ true,
             /*alignstack*/ false,
@@ -147,9 +149,20 @@ fn write_machine() -> Option<()> {
 
     // Can compile this to elf with
     // clang main.bc -o main.elf -target x86_64-pc-linux-gnu
-    assert!(module.write_bitcode_to_path(Path::new("./main.bc")));
+    // assert!(module.write_bitcode_to_path(Path::new("./main.bc")));
 
     assert!(target_machine.write_to_file(&module, FileType::Object, &path).is_ok());
+
+    let mut command = Command::new("clang");
+    let cmd = command
+        .arg(path)
+        .arg("-o")
+        .arg("main")
+        .arg("-lc");
+
+    let output = cmd.output().expect("failed to run clang");
+    stdout().write_all(&output.stdout).unwrap();
+    stderr().write_all(&output.stderr).unwrap();
 
     Some(())
 }

@@ -7,6 +7,9 @@ use inkwell::targets::{CodeModel, RelocMode, FileType, Target, TargetTriple, Ini
 use std::error::Error;
 use std::path::Path;
 
+// Look at 
+// https://github.com/rust-lang/libc/blob/master/src/unix/linux_like/linux/gnu/b64/x86_64/not_x32.rs
+
 /// Convenience type alias for the `sum` function.
 ///
 /// Calling this is innately `unsafe` because there's no guarantee it doesn't

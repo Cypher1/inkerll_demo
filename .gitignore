@@ -1,1 +1,5 @@
 /target
+*.elf
+*.asm
+*.bc
+main

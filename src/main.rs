@@ -4,10 +4,9 @@ use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::Module;
 use inkwell::targets::{CodeModel, RelocMode, FileType, Target, TargetTriple, InitializationConfig};
-use inkwell::values::BasicMetadataValueEnum;
 use std::error::Error;
 use std::path::Path;
-use libc::SYS_exit_group;
+use libc::SYS_exit;
 
 // Look at 
 // https://github.com/rust-lang/libc/blob/master/src/unix/linux_like/linux/gnu/b64/x86_64/not_x32.rs
@@ -100,7 +99,7 @@ fn write_machine() -> Option<()> {
         // let dummy_argc_val = i64_type.const_int(2, false);
         // let dummy_argv_val = i64_type.const_int(8000, false);
         // builder.build_call(main, &[dummy_argc_val.into(), dummy_argv_val.into()], "call_main");
-        let sys_exit_val = u64_type.const_int(SYS_exit_group.try_into().unwrap(), false); // TODO: more wat
+        let sys_exit_val = u64_type.const_int(SYS_exit.try_into().unwrap(), false); // TODO: more wat
         let exit_status = i64_type.const_int(11, false);
 
         // SYSCALL
@@ -112,12 +111,12 @@ fn write_machine() -> Option<()> {
         builder.position_at_end(basic_block);
         let asm_fn = context.i64_type().fn_type(&[context.i64_type().into(), context.i64_type().into()], false);
         let asm = context.create_inline_asm(
-            asm_fn,
-            "syscall".to_string(),
-            "=r,{rax},{rdi}".to_string(),
-            true,
-            false,
-            #[cfg(not(any(feature = "llvm4-0", feature = "llvm5-0", feature = "llvm6-0")))] None,
+            /*ty*/ asm_fn,
+            /*assembly*/ "syscall".to_string(),
+            /*constraints*/ "=r,{rax},{rdi}".to_string(),
+            /*sideeffects*/ true,
+            /*alignstack*/ false,
+            /*dialect*/ #[cfg(not(any(feature = "llvm4-0", feature = "llvm5-0", feature = "llvm6-0")))] None,
             #[cfg(not(any(
                 feature = "llvm4-0",
                 feature = "llvm5-0",
@@ -129,14 +128,14 @@ fn write_machine() -> Option<()> {
                 feature = "llvm11-0",
                 feature = "llvm12-0"
             )))]
-            false,
+            /*can throw*/ false,
         );
 
         let params = &[sys_exit_val.into(), exit_status.into()];
         #[cfg(not(any(feature = "llvm15-0")))]
         {
             use inkwell::values::CallableValue;
-            let callable_value = CallableValue::try_from(asm).unwrap();
+            let callable_value = CallableValue::try_from(asm).expect("Couldn't convert...");
             builder.build_call(callable_value, params, "exit");
         }
 

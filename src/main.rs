@@ -4,8 +4,10 @@ use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::Module;
 use inkwell::targets::{CodeModel, RelocMode, FileType, Target, TargetTriple, InitializationConfig};
+use inkwell::values::BasicMetadataValueEnum;
 use std::error::Error;
 use std::path::Path;
+use libc::SYS_exit_group;
 
 // Look at 
 // https://github.com/rust-lang/libc/blob/master/src/unix/linux_like/linux/gnu/b64/x86_64/not_x32.rs
@@ -72,9 +74,8 @@ fn write_machine() -> Option<()> {
     module.add_function("my_fn", fn_type, None);
 
     let i8_type = context.i8_type();
-    // let char_type = context.i8_type(); // This is `char`.
-    // This is for `char* argv[]`.
     let i64_type = context.i64_type();
+    let u64_type = context.i64_type(); // TODO: WAT
     let char_star_array_type = i64_type.into();
     // TODO: Learn from https://gota7.github.io/GotaGuide/ProgrammingLanguage/Llvm.html which does
     // a raw _start.
@@ -89,7 +90,7 @@ fn write_machine() -> Option<()> {
         builder.build_return(Some(&argc));
     }
 
-    if false {
+    if true {
         let start_fn_type = void_type.fn_type(&[], false);
         let start = module.add_function("_start", start_fn_type, None);
         let basic_block = context.append_basic_block(start, "entry");
@@ -99,6 +100,49 @@ fn write_machine() -> Option<()> {
         // let dummy_argc_val = i64_type.const_int(2, false);
         // let dummy_argv_val = i64_type.const_int(8000, false);
         // builder.build_call(main, &[dummy_argc_val.into(), dummy_argv_val.into()], "call_main");
+        let sys_exit_val = u64_type.const_int(SYS_exit_group.try_into().unwrap(), false); // TODO: more wat
+        let exit_status = i64_type.const_int(11, false);
+
+        // SYSCALL
+        let void_type = context.void_type();
+        let fn_type = void_type.fn_type(&[], false);
+        let syscall_wrapper = module.add_function("syscall_wrapper", fn_type, None);
+        let basic_block = context.append_basic_block(syscall_wrapper, "entry");
+
+        builder.position_at_end(basic_block);
+        let asm_fn = context.i64_type().fn_type(&[context.i64_type().into(), context.i64_type().into()], false);
+        let asm = context.create_inline_asm(
+            asm_fn,
+            "syscall".to_string(),
+            "=r,{rax},{rdi}".to_string(),
+            true,
+            false,
+            #[cfg(not(any(feature = "llvm4-0", feature = "llvm5-0", feature = "llvm6-0")))] None,
+            #[cfg(not(any(
+                feature = "llvm4-0",
+                feature = "llvm5-0",
+                feature = "llvm6-0",
+                feature = "llvm7-0",
+                feature = "llvm8-0",
+                feature = "llvm9-0",
+                feature = "llvm10-0",
+                feature = "llvm11-0",
+                feature = "llvm12-0"
+            )))]
+            false,
+        );
+
+        let params = &[sys_exit_val.into(), exit_status.into()];
+        #[cfg(not(any(feature = "llvm15-0")))]
+        {
+            use inkwell::values::CallableValue;
+            let callable_value = CallableValue::try_from(asm).unwrap();
+            builder.build_call(callable_value, params, "exit");
+        }
+
+        #[cfg(any(feature = "llvm15-0"))]
+        builder.build_call(asm_fn, asm, params, "exit");
+
         builder.build_return(None);
     }
 

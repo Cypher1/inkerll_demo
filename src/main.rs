@@ -58,11 +58,14 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     pub fn global_string(&mut self, value: &str) -> PointerValue<'ctx> {
-        self.strings.get(value).copied().unwrap_or_else(|| {
-            let ptr = self.builder.build_global_string_ptr(value, "global_string").as_pointer_value();
-            self.strings.insert(value.to_string(), ptr);
-            ptr
-        })
+        // self.strings.get(value).copied().unwrap_or_else(|| {
+            // let ptr = self.builder.build_global_string_ptr(value, "global_string").as_pointer_value();
+            // self.strings.insert(value.to_string(), ptr);
+            // ptr
+        // })
+        let ptr = self.builder.build_global_string_ptr(value, "global_string").as_pointer_value();
+        // self.strings.insert(value.to_string(), ptr);
+        ptr
     }
 
     pub fn printf(&mut self, fmt: &str, args: Vec<BasicMetadataValueEnum<'ctx>>) {

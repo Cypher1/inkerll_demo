@@ -57,28 +57,19 @@ impl<'ctx> CodeGen<'ctx> {
         self.context.i8_type().ptr_type(AddressSpace::default())
     }
 
-    /*
-    pub fn global_string(&mut self, _value: &str) -> PointerValue<'ctx> {
-        let value = "HELLO WORLD";
+    pub fn global_string(&mut self, value: &str) -> PointerValue<'ctx> {
         self.strings.get(value).copied().unwrap_or_else(|| {
-            println!("HERE3");
-            dbg!(value);
-            dbg!(&self.builder);
-            // let ptr_value = self.builder.build_global_string_ptr(value, "global_string");
-            // dbg!(ptr_value);
-            let ptr_value = self.context.const_string(value.as_bytes(), false);
+            let ptr_value = self.builder.build_global_string_ptr(value, "global_string");
             let ptr = ptr_value.as_pointer_value();
             self.strings.insert(value.to_string(), ptr);
-            println!("HERE4");
             ptr
         })
-    }*/
+    }
 
     pub fn printf(&mut self, fmt: &str, args: &[BasicMetadataValueEnum<'ctx>]) {
         let printf = self.get_printf();
         println!("HERE1");
-        let fmt_str = self.context.const_string(fmt.as_bytes(), false);
-        // let fmt_str = self.global_string(fmt);
+        let fmt_str = self.global_string(fmt);
         println!("HERE2");
         let mut arg_array: Vec<BasicMetadataValueEnum<'ctx>> = vec![fmt_str.into()];
         println!("HERE3");
@@ -106,44 +97,27 @@ impl<'ctx> CodeGen<'ctx> {
         let opt = OptimizationLevel::Default;
         let target_machine = target.create_target_machine(&target_triple, "generic", "", opt, reloc, model).unwrap();
 
-        // let path = Path::new("/tmp/some/path/main.asm");
         let path = Path::new("./main.elf");
-        // let target = Target::from_name("x86-64").unwrap();
-        // let target_machine = target.create_target_machine(
-            // &TargetTriple::create("x86_64-pc-linux-gnu"),
-            // "x86-64",
-            // "", // "+avx2",
-            // opt,
-            // reloc,
-            // model
-        // )
-        // .unwrap();
         self.module.set_data_layout(&target_machine.get_target_data().get_data_layout());
         self.module.set_triple(&target_triple);
 
         let i8_type = self.context.i8_type();
         let i64_type = self.context.i64_type();
         let char_star_type = i8_type.ptr_type(AddressSpace::default());
-        let char_star_array_type = char_star_type.ptr_type(AddressSpace::default()).into();
-        let main_fn_type = i8_type.fn_type(&[i64_type.into(), char_star_array_type], false);
+        let char_star_array_type = char_star_type.ptr_type(AddressSpace::default());
+        let main_fn_type = i8_type.fn_type(&[i64_type.into(), char_star_array_type.into()], false);
         let main = self.module.add_function("main", main_fn_type, None);
 
         let basic_block = self.context.append_basic_block(main, "entry");
-        let builder = self.context.create_builder();
-        builder.position_at_end(basic_block);
+        self.builder.position_at_end(basic_block);
 
         let argc = main.get_nth_param(0)?.into_int_value();
-        // let s = "WORLD";
-        // dbg!(s);
-        // let s = self.builder.build_global_string_ptr(&("HI ".to_string() + s), "my_str").as_pointer_value();
-        // dbg!(s);
-        // let printf = self.get_printf();
-        let printf_type = self.context.i32_type().fn_type(&[self.char_ptr_type().into()], true);
-        let printf = self.module.add_function("printf", printf_type, Some(Linkage::External));
-        dbg!(printf);
-        // self.builder.build_call(printf, &[], "_call_printf");
-        dbg!("HERE");
-        builder.build_return(Some(&argc));
+        let argv = main.get_nth_param(1)?;
+        // let z = self.context.i64_type().const_int(0, false);
+        // let hello_world = self.global_string("Hello World");
+        let argv_0 = self.builder.build_load(char_star_type, argv.into_pointer_value(), "argv_0"); // load(argv, z, "argv_0");
+        self.printf("ARGC: %d, ARGV: %s\n", &[argc.into(), argv_0.into()]);
+        self.builder.build_return(Some(&argc));
 
         // Can compile this to elf with
         // clang main.bc -o main.elf -target x86_64-pc-linux-gnu

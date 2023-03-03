@@ -97,8 +97,8 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn write_machine(&mut self) -> Option<()> {
-        Target::initialize_x86(&InitializationConfig::default());
-        // Target::initialize_all(&InitializationConfig::default());
+        // Target::initialize_x86(&InitializationConfig::default());
+        Target::initialize_all(&InitializationConfig::default());
         let target_triple = TargetMachine::get_default_triple();
         let target = Target::from_triple(&target_triple).unwrap();
         let reloc = RelocMode::Default;
@@ -121,16 +121,10 @@ impl<'ctx> CodeGen<'ctx> {
         self.module.set_data_layout(&target_machine.get_target_data().get_data_layout());
         self.module.set_triple(&target_triple);
 
-        let void_type = self.context.void_type();
-        let fn_type = void_type.fn_type(&[], false);
-
-        self.module.add_function("my_fn", fn_type, None);
-
         let i8_type = self.context.i8_type();
         let i64_type = self.context.i64_type();
-        let char_star_array_type = i64_type.into();
-        // TODO: Learn from https://gota7.github.io/GotaGuide/ProgrammingLanguage/Llvm.html which does
-        // a raw _start.
+        let char_star_type = i8_type.ptr_type(AddressSpace::default());
+        let char_star_array_type = char_star_type.ptr_type(AddressSpace::default()).into();
         let main_fn_type = i8_type.fn_type(&[i64_type.into(), char_star_array_type], false);
         let main = self.module.add_function("main", main_fn_type, None);
 
@@ -139,79 +133,17 @@ impl<'ctx> CodeGen<'ctx> {
         builder.position_at_end(basic_block);
 
         let argc = main.get_nth_param(0)?.into_int_value();
-        // let argv = main.get_nth_param(1)?.into_int_value();
-
-        // self.printf("ARGC %d. ARGV[0]='%s'", &[argc.into(), argv.into()]);
-        //
-        let s = "WORLD";
-        dbg!(s);
-        let s = self.builder.build_global_string_ptr(&("HI ".to_string() + s), "my_str").as_pointer_value();
-        dbg!(s);
+        // let s = "WORLD";
+        // dbg!(s);
+        // let s = self.builder.build_global_string_ptr(&("HI ".to_string() + s), "my_str").as_pointer_value();
+        // dbg!(s);
         // let printf = self.get_printf();
         let printf_type = self.context.i32_type().fn_type(&[self.char_ptr_type().into()], true);
-        let printf = self.module.add_function("printf", printf_type, None);
+        let printf = self.module.add_function("printf", printf_type, Some(Linkage::External));
         dbg!(printf);
-        self.builder.build_call(printf, &[s.into()], "_call_printf");
+        // self.builder.build_call(printf, &[], "_call_printf");
         dbg!("HERE");
         builder.build_return(Some(&argc));
-
-        /*
-        if false {
-            let start_fn_type = void_type.fn_type(&[], false);
-            let start = self.module.add_function("_start", start_fn_type, None);
-            let basic_block = self.context.append_basic_block(start, "entry");
-            let builder = self.context.create_builder();
-            builder.position_at_end(basic_block);
-            // https://stackoverflow.com/questions/16721164/x86-linux-assembler-get-program-parameters-from-start
-            // let dummy_argc_val = i64_type.const_int(2, false);
-            // let dummy_argv_val = i64_type.const_int(8000, false);
-            // builder.build_call(main, &[dummy_argc_val.into(), dummy_argv_val.into()], "call_main");
-            let sys_exit_val = u64_type.const_int(SYS_exit.try_into().unwrap(), false); // TODO: more wat
-            let exit_status = i64_type.const_int(11, false);
-
-            // SYSCALL
-            let void_type = self.context.void_type();
-            let fn_type = void_type.fn_type(&[], false);
-            let syscall_wrapper = self.module.add_function("syscall_wrapper", fn_type, None);
-            let basic_block = self.context.append_basic_block(syscall_wrapper, "entry");
-
-            builder.position_at_end(basic_block);
-            let asm_fn = self.context.i64_type().fn_type(&[context.i64_type().into(), self.context.i64_type().into()], false);
-            let asm = self.context.create_inline_asm(
-                /*ty*/ asm_fn,
-                /*assembly*/ "mov eax,1\nint 0x80".to_string(),
-                /*constraints*/ "=r,{rax},{rdi}".to_string(),
-                /*sideeffects*/ true,
-                /*alignstack*/ false,
-                /*dialect*/ #[cfg(not(any(feature = "llvm4-0", feature = "llvm5-0", feature = "llvm6-0")))] None,
-                #[cfg(not(any(
-                    feature = "llvm4-0",
-                    feature = "llvm5-0",
-                    feature = "llvm6-0",
-                    feature = "llvm7-0",
-                    feature = "llvm8-0",
-                    feature = "llvm9-0",
-                    feature = "llvm10-0",
-                    feature = "llvm11-0",
-                    feature = "llvm12-0"
-                )))]
-                /*can throw*/ false,
-            );
-
-            let params = &[sys_exit_val.into(), exit_status.into()];
-            #[cfg(not(any(feature = "llvm15-0")))]
-            {
-                use inkwell::values::CallableValue;
-                let callable_value = CallableValue::try_from(asm).expect("Couldn't convert...");
-                builder.build_call(callable_value, params, "exit");
-            }
-
-            #[cfg(any(feature = "llvm15-0"))]
-            builder.build_call(asm_fn, asm, params, "exit");
-
-            builder.build_return(None);
-        }
-    */
 
         // Can compile this to elf with
         // clang main.bc -o main.elf -target x86_64-pc-linux-gnu
